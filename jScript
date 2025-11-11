@@ -4,6 +4,8 @@ pipeline {
     environment {
         DATABRICKS_HOST = 'https://dbc-6289de08-cfb9.cloud.databricks.com'
         DATABRICKS_TOKEN = credentials('DATABRICKS_TOKEN_2')
+        CLUSTER_ID = '2236063f6f28e164' // Replace with your cluster ID
+        NOTEBOOK_PATH = '/Workspace/Users/hritik.moon@incredotech.com/SStream/SparkStreaming/API_stream' // Replace with your notebook path
     }
 
     stages {
@@ -15,21 +17,42 @@ pipeline {
 
         stage('Install Databricks CLI') {
             steps {
-                bat '''
-                    echo Upgrading pip and installing Databricks CLI...
+                bat """
                     python -m pip install --upgrade pip
                     pip install --upgrade databricks-cli
-                '''
+                    pip install jq
+                """
             }
         }
 
         stage('Run Databricks Notebook') {
             steps {
-                bat """
-                    echo Running Databricks notebook using Python module...
+                script {
+                    echo "Submitting notebook to Databricks..."
 
-                    python -m databricks_cli.runs.cli submit --json "{\\"run_name\\": \\"Jenkins Notebook Run - Build #${BUILD_NUMBER}\\", \\"existing_cluster_id\\": \\"2236063f6f28e164\\", \\"notebook_task\\": {\\"notebook_path\\": \\"/Repos/hritik@incredo.com/SStream/SparkStreaming/API_stream\\"}}"
-                """
+                    // Submit notebook and wait for completion
+                    def submitOutput = bat(returnStdout: true, script: """
+                        databricks runs submit --json "{ 
+                            \\"run_name\\": \\"Jenkins Notebook Run - Build #${env.BUILD_NUMBER}\\", 
+                            \\"existing_cluster_id\\": \\"${env.CLUSTER_ID}\\",
+                            \\"notebook_task\\": { \\"notebook_path\\": \\"${env.NOTEBOOK_PATH}\\" } 
+                        }" --wait --output JSON
+                    """).trim()
+
+                    echo "Databricks run output: ${submitOutput}"
+
+                    // Parse result_state from JSON
+                    def resultState = bat(returnStdout: true, script: """
+                        echo ${submitOutput} | jq -r '.run_page_url, .run_id, .run_name, .state.result_state, .state.state_message'
+                    """).trim()
+
+                    echo "Run details:\n${resultState}"
+
+                    // Fail Jenkins if notebook failed
+                    if (!submitOutput.contains('"result_state": "SUCCESS"')) {
+                        error "Databricks notebook failed! See logs above for details."
+                    }
+                }
             }
         }
     }
