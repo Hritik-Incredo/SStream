@@ -2,81 +2,41 @@ pipeline {
     agent any
 
     environment {
-        DATABRICKS_HOST = credentials('DBHost')
-        DATABRICKS_TOKEN = credentials('DBT') // Jenkins secret text token
+        DATABRICKS_HOST = 'https://dbc-6289de08-cfb9.cloud.databricks.com'
+        DATABRICKS_TOKEN = credentials('DATABRICKS_TOKEN_2')
     }
 
     stages {
-        stage('Checkout GitHub Repo') {
+        stage('Checkout Notebook Repo') {
             steps {
-                git url: 'https://github.com/Hritik-Incredo/SStream.git', branch: 'main'
+                git branch: 'main', url: 'https://github.com/Hritik-Incredo/SStream.git'
             }
         }
 
-        stage('Prepare Notebook JSON') {
+        stage('Install Databricks CLI') {
             steps {
-                script {
-                    writeFile file: 'notebook_run.json', text: """
-                    {
-                      "job_id": 216873594474493
-                      }
-                    }
-                    """
-                }
+                bat '''
+                    echo Upgrading pip and installing Databricks CLI...
+                    python -m pip install --upgrade pip
+                    pip install --upgrade databricks-cli
+                '''
             }
         }
 
-        stage('Run Databricks Notebook and Monitor') {
+        stage('Run Databricks Notebook') {
             steps {
-                // ✅ Inject Databricks host + token from Jenkins credentials
-                withCredentials([
-                    string(credentialsId: 'DBHost', variable: 'DATABRICKS_HOST'),
-                    string(credentialsId: 'DBT', variable: 'DATABRICKS_TOKEN')
-                ]) {
-                    script {
-                        // Test what values are loaded
-                        bat 'echo Using Databricks host: %DATABRICKS_HOST%'
- 
-                        // Trigger job
-                        def output = bat(script: 'databricks jobs run-now --json @notebook_run.json', returnStdout: true).trim()
-                        echo "Databricks run response: ${output}"
- 
-                        // Parse and monitor run
-                        def json = readJSON text: output
-                        def runId = json.run_id
-                        echo "Triggered run_id: ${runId}"
- 
-                        // Poll until finish
-                        while (true) {
-                            sleep 10
-                            def runInfoRaw = bat(script: "databricks jobs get --run-id ${runId}", returnStdout: true).trim()
-                            def runInfo = readJSON text: runInfoRaw
-                            def state = runInfo.state.life_cycle_state
-                            echo "Current run status: ${state}"
-                            if (state == 'TERMINATED' || state == 'SKIPPED' || state == 'INTERNAL_ERROR') {
-                                break
-                            }
-                        }
- 
-                        def finalInfoRaw = bat(script: "databricks jobs get --run-id ${runId}", returnStdout: true).trim()
-                        def finalInfo = readJSON text: finalInfoRaw
-                        def result = finalInfo.state.result_state
-                        echo "Final result: ${result}"
- 
-                        if (result != 'SUCCESS') {
-                            error "❌ Databricks notebook run failed. Check Databricks UI."
-                        } else {
-                            echo "✅ Notebook ran successfully!"
-                        }
-                    }
-                }
+                bat """
+                    echo Running Databricks notebook using Python module...
+
+                    python -m databricks_cli.runs.cli submit --json "{\\"run_name\\": \\"Jenkins Notebook Run - Build #${BUILD_NUMBER}\\", \\"existing_cluster_id\\": \\"2236063f6f28e164\\", \\"notebook_task\\": {\\"notebook_path\\": \\"/Repos/hritik@incredo.com/SStream/SparkStreaming/API_stream\\"}}"
+                """
             }
         }
     }
- 
+
     post {
         always {
-            echo 'Databricks notebook job finished.'
+            echo "Databricks notebook job finished."
         }
     }
 }
