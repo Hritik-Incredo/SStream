@@ -2,7 +2,7 @@ pipeline {
     agent any
 
     environment {
-        DATABRICKS_HOST = 'DBH'
+        DATABRICKS_HOST = credentials('DBH')
         DATABRICKS_TOKEN = credentials('DBT') // Jenkins secret text token
     }
 
