@@ -31,7 +31,7 @@ stage('Prepare Notebook JSON') {
                 script {
                         bat 'databricks jobs run-now --json @notebook_run.json'
                         }
-                    )
+                    
                     
                     if (result != 0) {
                         error "Databricks notebook run failed. Check Databricks UI for details."
