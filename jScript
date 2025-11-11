@@ -13,31 +13,24 @@ pipeline {
             }
         }
 
-        stage('Prepare Notebook JSON') {
-            steps {
-                script {
-                    // Create JSON file for the notebook run
-                    def jsonContent = """
-                    {
-                        "run_name": "Jenkins Notebook Run - Build #${env.BUILD_NUMBER}",
-                        "existing_cluster_id": "2236063f6f28e164",
-                        "notebook_task": {
-                            "notebook_path": "/Workspace/Users/hritik.moon@incredotech.com/SStream/SparkStreaming/API_stream"
-                        }
-                    }
-                    """
-                    writeFile file: 'notebook_run.json', text: jsonContent
-                }
-            }
+stage('Prepare Notebook JSON') {
+    script {
+        writeFile file: 'notebook_run.json', text: """
+        {
+          "job_id": 1234,
+          "notebook_params": {
+            "input_path": "/mnt/data/sample.csv",
+            "run_date": "2025-11-11"
+          }
         }
-
+        """
+    }
+}
         stage('Run Databricks Notebook') {
             steps {
                 script {
-                    // Submit notebook and fail pipeline if errors occur
-                    def result = bat(
-                        script: 'databricks jobs run-now --json @notebook_run.json',
-                        returnStatus: true
+                        bat 'databricks jobs run-now --json @notebook_run.json'
+                        }
                     )
                     
                     if (result != 0) {
